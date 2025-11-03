@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Base58 Seed Phrase Generator</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:820px;margin:28px auto;padding:18px}
+    h1{margin:0 0 8px}
+    label{display:block;margin:12px 0 6px;font-weight:600}
+    input[type=number]{width:120px;padding:8px}
+    button{padding:8px 12px;margin-left:8px}
+    .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .seeds{margin-top:18px}
+    .seed-row{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e6e6e6;border-radius:6px;margin-bottom:8px;background:#fafafa}
+    .seed{font-family:monospace;word-break:break-all;flex:1}
+    small.warn{display:block;margin-top:12px;color:#8a0000}
+  </style>
+</head>
+<body>
+  <h1>Base58 Seed Generator</h1>
+  <p>Generates cryptographically random Base58 seed strings. Save and handle results offline. Never paste your real wallet seed or private key into websites you do not control.</p>
+
+  <div class="controls">
+    <div>
+      <label for="length">Seed length (characters)</label>
+      <input id="length" type="number" min="8" max="128" value="44" />
+    </div>
+
+    <div>
+      <label for="count">Number of seeds</label>
+      <input id="count" type="number" min="1" max="100" value="5" />
+    </div>
+
+    <div style="align-self:end">
+      <button id="generate">Generate</button>
+      <button id="download" disabled>Download</button>
+    </div>
+  </div>
+
+  <small class="warn">Warning: generate seeds offline and store securely. Anyone with a seed can control the wallet it unlocks.</small>
+
+  <div class="seeds" id="seedsContainer"></div>
+
+  <script>
+    (function(){
+      const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+      const generateBtn = document.getElementById("generate");
+      const downloadBtn = document.getElementById("download");
+      const seedsContainer = document.getElementById("seedsContainer");
+
+      function secureRandomIndex(max) {
+        const range = BigInt(max);
+        const bytesNeeded = Math.ceil(Number(range.toString(2).length) / 8);
+        const maxInt = (BigInt(1) << BigInt(bytesNeeded * 8)) - BigInt(1);
+        const cutoff = maxInt - (maxInt % range);
+        while (true) {
+          const arr = new Uint8Array(bytesNeeded);
+          crypto.getRandomValues(arr);
+          let val = BigInt(0);
+          for (let i = 0; i < arr.length; i++) {
+            val = (val << BigInt(8)) + BigInt(arr[i]);
+          }
+          if (val < cutoff) return Number(val % range);
+        }
+      }
+
+      function generateBase58String(length) {
+        let out = "";
+        for (let i = 0; i < length; i++) {
+          out += BASE58[secureRandomIndex(BASE58.length)];
+        }
+        return out;
+      }
+
+      function clearSeeds() {
+        seedsContainer.innerHTML = "";
+      }
+
+      function createSeedRow(seed, idx) {
+        const row = document.createElement("div");
+        row.className = "seed-row";
+
+        const pre = document.createElement("div");
+        pre.className = "seed";
+        pre.textContent = seed;
+
+        const copyBtn = document.createElement("button");
+        copyBtn.textContent = "Copy";
+        copyBtn.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(seed);
+            copyBtn.textContent = "Copied";
+            setTimeout(()=>copyBtn.textContent = "Copy", 1200);
+          } catch (e) {
+            alert("Copy failed. You can select and copy manually.");
+          }
+        });
+
+        const saveBtn = document.createElement("button");
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", () => {
+          const blob = new Blob([seed], {type:"text/plain;charset=utf-8"});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `seed-${idx+1}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        });
+
+        row.appendChild(pre);
+        row.appendChild(copyBtn);
+        row.appendChild(saveBtn);
+        return row;
+      }
+
+      generateBtn.addEventListener("click", () => {
+        const length = parseInt(document.getElementById("length").value, 10) || 44;
+        const count = parseInt(document.getElementById("count").value, 10) || 5;
+        if (length < 8 || length > 128 || count < 1 || count > 100) {
+          alert("Length must be 8-128 and count 1-100");
+          return;
+        }
+        clearSeeds();
+        const seeds = [];
+        for (let i = 0; i < count; i++) {
+          const s = generateBase58String(length);
+          seeds.push(s);
+          seedsContainer.appendChild(createSeedRow(s, i));
+        }
+        downloadBtn.disabled = false;
+        downloadBtn.dataset.payload = seeds.join("\n");
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        const payload = downloadBtn.dataset.payload || "";
+        const blob = new Blob([payload], {type:"text/plain;charset=utf-8"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `base58-seeds-${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+    })();
+  </script>
+</body>
+</html>
